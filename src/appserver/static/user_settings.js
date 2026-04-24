@@ -1,3 +1,9 @@
+require.config({
+    paths: {
+        "select2/select2": "../app/alert_manager/contrib/select2/select2"
+    }
+});
+
 require([
     "splunkjs/mvc",
     "splunkjs/mvc/utils",

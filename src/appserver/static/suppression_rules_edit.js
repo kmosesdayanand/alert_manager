@@ -1,7 +1,8 @@
 
 require.config({
     paths: {
-        SuppressionRuleEditorView: "../app/alert_manager/views/SuppressionRuleEditorView"
+        SuppressionRuleEditorView: "../app/alert_manager/views/SuppressionRuleEditorView",
+        "select2/select2": "../app/alert_manager/contrib/select2/select2"
     }
 });
 

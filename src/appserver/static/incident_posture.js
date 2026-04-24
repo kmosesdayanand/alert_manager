@@ -1,6 +1,7 @@
 require.config({
     paths: {
-        "app": "../app"
+        "app": "../app",
+        "select2/select2": "../app/alert_manager/contrib/select2/select2"
     }
 });
 
