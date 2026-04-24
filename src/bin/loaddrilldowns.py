@@ -1,18 +1,25 @@
 #!/usr/bin/env python
 # coding=utf-8
-import os,sys
-import time
-import splunklib.client as client
-import splunklib.results as results
+
+import os
+import sys
 import json
-import collections
 import re
 import urllib.parse
 from string import Template as StringTemplate
 
-splunkhome = os.environ['SPLUNK_HOME']
-sys.path.append(os.path.join(splunkhome, 'etc', 'apps', 'alert_manager', 'bin', 'splunklib'))
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
+_SPLUNKLIB_DIR = os.path.join(_BIN_DIR, 'splunklib')
+if _SPLUNKLIB_DIR not in sys.path:
+    sys.path.insert(0, _SPLUNKLIB_DIR)
+
+import splunklib.client as client
+import splunklib.results as results
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration, Option, validators
+
 
 @Configuration(type='reporting')
 class loaddrilldowns(GeneratingCommand):
@@ -24,145 +31,123 @@ class loaddrilldowns(GeneratingCommand):
 
         service = self.service
 
-        # Check if configuration exists for collect_data_results
         try:
             collect_data_results = service.confs['alert_manager']['settings']['collect_data_results']
-        except:
-            raise RuntimeWarning('Specified setting ""collect_data_results" in "alert_manager.conf" does not exist.')
+        except Exception:
+            self.logger.error('Setting "collect_data_results" not found in alert_manager.conf')
+            yield {'Error': 'Setting "collect_data_results" not found in alert_manager.conf'}
+            return
 
-        # Check if configuration exists for index_data_results
         try:
             index_data_results = service.confs['alert_manager']['settings']['index_data_results']
-        except:
-            raise RuntimeWarning('Specified setting ""index_data_results" in "alert_manager.conf" does not exist.')
+        except Exception:
+            self.logger.error('Setting "index_data_results" not found in alert_manager.conf')
+            yield {'Error': 'Setting "index_data_results" not found in alert_manager.conf'}
+            return
 
-        # Fetch Results from KV Store by default if enabled
+        incident_data = {}
+
         if collect_data_results == '1':
             service.namespace['owner'] = "Nobody"
+            collection = service.kvstore["incident_results"]
 
-            collection_name = "incident_results"
-            collection = service.kvstore[collection_name]
-
-            query_dict = {}
-            query_dict['incident_id'] = self.incident_id
-            query = json.dumps(query_dict)
-
+            query = json.dumps({'incident_id': self.incident_id})
             data = collection.data.query(query=query)
 
-            incident_data = {}
-                    
-            incident_data = data[0].get("fields")[0]
+            if data:
+                fields_list = data[0].get("fields", [])
+                if fields_list:
+                    incident_data = fields_list[0]
+                    for k, v in incident_data.items():
+                        incident_data[k] = urllib.parse.quote(str(v))
 
-            for k,v in incident_data.items():
-                incident_data[k] = urllib.parse.quote(v)
-
-        # If KV Store Data is not enabled, get indexed data
         elif index_data_results == '1' and collect_data_results == '0':
-            # Get index location
             try:
                 index = service.confs['alert_manager']['settings']['index']
-            except:
-                raise RuntimeWarning('Specified setting ""index_data_results" in "alert_manager.conf" does not exist.')
+            except Exception:
+                self.logger.error('Setting "index" not found in alert_manager.conf')
+                yield {'Error': 'Setting "index" not found in alert_manager.conf'}
+                return
 
-            # Get earliest time first for incident results
             service.namespace['owner'] = "Nobody"
+            collection = service.kvstore["incidents"]
 
-            collection_name = "incidents"
-            collection = service.kvstore[collection_name]
-
-            query_dict = {}
-            query_dict['incident_id'] = self.incident_id
-            query = json.dumps(query_dict)
-
+            query = json.dumps({'incident_id': self.incident_id})
             data = collection.data.query(query=query)
+
+            if not data:
+                self.logger.warning("No incidents found for incident_id=%s", self.incident_id)
+                return
+
             earliest_time = data[0].get("alert_time")
 
-            # Fetch events
-            events = []
-            incident_data = {}
-        
-            kwargs_oneshot = json.loads('{{"earliest_time": "{}", "latest_time": "{}"}}'.format(earliest_time, "now"))
-
-            searchquery_oneshot = "search index={} sourcetype=alert_data_results incident_id={} |dedup incident_id".format(index, self.incident_id)
+            kwargs_oneshot = {"earliest_time": earliest_time, "latest_time": "now"}
+            searchquery_oneshot = "search index={} sourcetype=alert_data_results incident_id={} |dedup incident_id".format(
+                index, self.incident_id)
             oneshotsearch_results = service.jobs.oneshot(searchquery_oneshot, **kwargs_oneshot)
             reader = results.ResultsReader(oneshotsearch_results)
 
-            for result in reader:  
-                    for k, v in result.items():
-                        if k=='_raw':
-                            events.append(json.loads(v))
+            events = []
+            for result in reader:
+                for k, v in result.items():
+                    if k == '_raw':
+                        events.append(json.loads(v))
 
             for event in events:
-                incident_data = event.get("fields")[0]
-                
-            for k,v in incident_data.items():
-                incident_data[k] = urllib.parse.quote(v)
-        
+                fields_list = event.get("fields", [])
+                if fields_list:
+                    incident_data = fields_list[0]
+
+            for k, v in incident_data.items():
+                incident_data[k] = urllib.parse.quote(str(v))
+
         # Get Incident
-        query_dict = {}
-        query_dict['incident_id'] = self.incident_id
-
-        collection_name = "incidents"
-        collection = service.kvstore[collection_name]
-        query = json.dumps(query_dict)
-
+        collection = service.kvstore["incidents"]
+        query = json.dumps({'incident_id': self.incident_id})
         data = collection.data.query(query=query)
+
+        if not data:
+            self.logger.warning("No incident found for incident_id=%s", self.incident_id)
+            return
 
         alert = data[0].get('alert')
 
         # Get Incident Settings
-        query_dict = {}
-        query_dict['alert'] = alert
-
-        collection_name = "incident_settings"
-        collection = service.kvstore[collection_name]
-        query = json.dumps(query_dict)
-        
+        collection = service.kvstore["incident_settings"]
+        query = json.dumps({'alert': alert})
         data = collection.data.query(query=query)
 
-        drilldown_references = data[0].get('drilldowns')
+        if not data:
+            self.logger.warning("No incident_settings found for alert=%s", alert)
+            return
 
-        # Get Drilldown Settings
-        if len(drilldown_references)>0:
-            query_dict =  {}
+        drilldown_references = data[0].get('drilldowns', '')
 
-            drilldown_references = drilldown_references.split()
+        if not drilldown_references:
+            return
 
-            query_prefix='{ "$or": [ ' 
+        drilldown_references = drilldown_references.split()
 
-            for drilldown_reference in drilldown_references:
-                query_prefix += '{ "name": "' + drilldown_reference + '" } '
+        query_prefix = '{ "$or": [ '
+        for drilldown_reference in drilldown_references:
+            query_prefix += '{ "name": "' + drilldown_reference + '" } '
+        query_prefix = query_prefix + '] }'
 
-            query_prefix = query_prefix + '] }'
+        collection = service.kvstore["drilldown_actions"]
+        query = query_prefix.replace("} {", "}, {")
+        data = collection.data.query(query=query)
 
-            collection_name = "drilldown_actions"
-            collection = service.kvstore[collection_name]
-            query = query_prefix.replace("} {", "}, {")
-            
-            data = collection.data.query(query=query)
+        class FieldTemplate(StringTemplate):
+            idpattern = r'[a-zA-Z][_a-zA-Z0-9.]*'
 
-            drilldowns = []
+        for drilldown_action in data:
+            url = drilldown_action.get("url", "")
+            label = drilldown_action.get("label", "")
 
-            # Substitute variables with field values
-            for drilldown_action in data:
-               
-                url = drilldown_action.get("url")
-                label = drilldown_action.get("label")
+            url = re.sub(r'(?<=\w)\$', '', url)
+            url = FieldTemplate(url).safe_substitute(incident_data)
 
-                url = re.sub(r'(?<=\w)\$', '', url)
-
-                class FieldTemplate(StringTemplate):
-                    idpattern = r'[a-zA-Z][_a-zA-Z0-9.]*'
-
-                url_template = FieldTemplate(url)
-
-                url = url_template.safe_substitute(incident_data)
-                
-                drilldown = r'''{{ "label": "{}", "url": "{}" }}'''.format(label, url)
-               
-                yield(json.loads(drilldown))
-
-        self.finish()             
+            yield {"label": label, "url": url}
 
 
-dispatch(loaddrilldowns, sys.argv, sys.stdin, sys.stdout, __name__)    
+dispatch(loaddrilldowns, sys.argv, sys.stdin, sys.stdout, __name__)
