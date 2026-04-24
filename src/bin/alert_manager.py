@@ -305,7 +305,7 @@ def createContext(metadata, incident_settings, results, sessionKey, payload):
     context.update({ "tags" : metadata["tags"] })
     context.update({ "results_link" : payload['results_link'] })
 
-    split_results_path = urllib.parse.splitquery(payload['results_link'])[0].split('/')
+    split_results_path = urllib.parse.urlsplit(payload['results_link']).path.split('/')
     view_path = '/'.join(split_results_path[:-1]) + '/'
     view_link = view_path + 'alert?' + urllib.parse.urlencode({'s': metadata['entry'][0]['links'].get('alternate') })
     context.update({ "view_link" : view_link })
