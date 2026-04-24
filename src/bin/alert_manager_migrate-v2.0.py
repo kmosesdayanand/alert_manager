@@ -5,7 +5,6 @@ import urllib.parse
 import json
 import splunk
 import splunk.rest as rest
-import splunk.input as input
 import splunk.entity as entity
 import splunk
 import time
@@ -16,10 +15,12 @@ import socket
 import re
 import os.path
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from CsvLookup import CsvLookup
 from ApiManager import ApiManager
@@ -41,7 +42,7 @@ def getLookupFile(lookup_name, sessionKey):
         serverResponse, serverContent = rest.simpleRequest(uri, sessionKey=sessionKey)
         lookup = json.loads(serverContent)
         log.debug("Got lookup content for lookup={}. filename={} app={}".format(lookup_name, lookup["entry"][0]["content"]["filename"], lookup["entry"][0]["acl"]["app"]))
-        return os.path.join(util.get_apps_dir(), lookup["entry"][0]["acl"]["app"], 'lookups', lookup["entry"][0]["content"]["filename"])
+        return os.path.join(_APPS_DIR, lookup["entry"][0]["acl"]["app"], 'lookups', lookup["entry"][0]["content"]["filename"])
     except Exception as e:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         log.warn("Unable to get lookup {}. Reason: {}. Line: {}".format(lookup_name, exc_type, exc_tb.tb_lineno))
@@ -210,7 +211,7 @@ if __name__ == "__main__":
     #
     # Check if default email templates exist
     #
-    defaultEmailTemplatesFile = os.path.join(util.get_apps_dir(), 'alert_manager', 'appserver', 'src', 'default_email_templates.json')
+    defaultEmailTemplatesFile = os.path.join(_APP_DIR, 'appserver', 'src', 'default_email_templates.json')
 
     # Get current default templates
     query = { "$or": [ { "template_name": "default_incident_created" } , { "template_name": "default_incident_assigned" }, { "template_name": "default_incident_suppressed" } ] }
@@ -255,7 +256,7 @@ if __name__ == "__main__":
     #
     # Check if default notification scheme exists
     #
-    defaultNotificationSchemeFile = os.path.join(util.get_apps_dir(), 'alert_manager', 'appserver', 'src', 'default_notification_scheme.json')
+    defaultNotificationSchemeFile = os.path.join(_APP_DIR, 'appserver', 'src', 'default_notification_scheme.json')
 
     # Get current default notification scheme
     query = { "$or": [ { "schemeName": "default_notification_scheme" } ] }

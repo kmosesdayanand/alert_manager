@@ -5,7 +5,6 @@ import urllib.parse
 import json
 import splunk
 import splunk.rest as rest
-import splunk.input as input
 import splunk.entity as entity
 import splunk
 import time
@@ -17,10 +16,12 @@ import socket
 import re
 import os.path
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from CsvLookup import CsvLookup
 from ApiManager import ApiManager
@@ -51,8 +52,8 @@ if __name__ == "__main__":
 
     # Remove old application icons if they exist
     
-    app_logo = os.path.join(util.get_apps_dir(), 'alert_manager', 'static', 'appLogo.png')
-    app_logo2x = os.path.join(util.get_apps_dir(), 'alert_manager', 'static', 'appLogo_2x.png')
+    app_logo = os.path.join(_APP_DIR, 'static', 'appLogo.png')
+    app_logo2x = os.path.join(_APP_DIR, 'static', 'appLogo_2x.png')
 
     if os.path.exists(app_logo):
         os.remove(app_logo)
@@ -83,7 +84,7 @@ if __name__ == "__main__":
 
     if len(alert_status) == 0:
         log.info("No default alert status exist. Creating....")
-        defaultStatusFile = os.path.join(util.get_apps_dir(), 'alert_manager', 'appserver', 'src', 'default_status.json')
+        defaultStatusFile = os.path.join(_APP_DIR, 'appserver', 'src', 'default_status.json')
 
         if os.path.isfile(defaultStatusFile):
 
@@ -126,7 +127,7 @@ if __name__ == "__main__":
         log.debug("custom_alert_statuses: {}".format(custom_alert_statuses))
 
         log.info("Creating default alert status")
-        defaultStatusFile = os.path.join(util.get_apps_dir(), 'alert_manager', 'appserver', 'src', 'default_status.json')
+        defaultStatusFile = os.path.join(_APP_DIR, 'appserver', 'src', 'default_status.json')
 
         if os.path.isfile(defaultStatusFile):
 

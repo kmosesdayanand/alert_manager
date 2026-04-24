@@ -2,7 +2,9 @@ import os
 import logging
 from logging.config import fileConfig
 import configparser
-import splunk.appserver.mrsparkle.lib.util as util
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_BIN_DIR = os.path.dirname(_LIB_DIR)
+_APP_DIR = os.path.dirname(_BIN_DIR)
 
 def setupLogger(logger='alert_manager'):
 
@@ -13,8 +15,8 @@ def setupLogger(logger='alert_manager'):
 		logger = 'alert_manager_%s' % logger
 
 	# Get loglevel from config file
-	local = os.path.join(util.get_apps_dir(), "alert_manager", "local", "alert_manager.conf")
-	default = os.path.join(util.get_apps_dir(), "alert_manager", "default", "alert_manager.conf")
+	local = os.path.join(_APP_DIR, "local", "alert_manager.conf")
+	default = os.path.join(_APP_DIR, "default", "alert_manager.conf")
 
 	config = configparser.ConfigParser()
 

@@ -10,14 +10,15 @@ import operator
 from string import Template
 
 import splunk
-import splunk.appserver.mrsparkle.lib.util as util
 import splunk.rest as rest
 import splunk.entity as entity
-import splunk.input as input
 
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from AlertManagerUsers import AlertManagerUsers
 from CsvLookup import CsvLookup
@@ -192,14 +193,14 @@ class EmailTemplatesHandler(PersistentServerConnectionApplication):
 
         file_list = []
 
-        file_default_dir = os.path.join(util.get_apps_dir(), "alert_manager", "default", "templates")
+        file_default_dir = os.path.join(_APP_DIR, "default", "templates")
         if os.path.exists(file_default_dir):
             for f in os.listdir(file_default_dir):
                 if re.match(r'.*\.html', f):
                     if f not in file_list:
                         file_list.append(f)
 
-        file_local_dir = os.path.join(util.get_apps_dir(), "alert_manager", "local", "templates")
+        file_local_dir = os.path.join(_APP_DIR, "local", "templates")
         if os.path.exists(file_local_dir):
             for f in os.listdir(file_local_dir):
                 if re.match(r'.*\.html', f):

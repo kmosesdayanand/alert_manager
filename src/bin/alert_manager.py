@@ -7,8 +7,6 @@ import splunk.auth as auth
 import splunk.entity as entity
 import splunk.Intersplunk as intersplunk
 import splunk.rest as rest
-import splunk.search as search
-import splunk.input as input
 import splunk.util as sutil
 import urllib.parse
 import json
@@ -20,10 +18,12 @@ import uuid
 import tempfile
 import traceback
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from EventHandler import EventHandler
 from IncidentContext import IncidentContext
@@ -91,7 +91,7 @@ def setIncidentsAutoPreviousResolved(context, index, sessionKey):
             getRestData(uri, sessionKey, json.dumps(incident))
 
             event = 'severity=INFO origin="alert_handler" user="splunk-system-user" action="auto_previous_resolve" previous_status="{}" status="auto_previous_resolved" incident_id="{}" job_id="{}" resolving_incident="{}"'.format(previous_status, previous_incident_id, previous_job_id, context.get('incident_id'))
-            createIncidentChangeEvent(event, previous_job_id, index)
+            createIncidentChangeEvent(event, previous_job_id, index, sessionKey)
 
             ic = IncidentContext(sessionKey, previous_incident_id)
             eh.handleEvent(alert=context.get('name'), event="incident_auto_previous_resolved", incident={"owner": previous_owner}, context=ic.getContext())
@@ -114,14 +114,14 @@ def setIncidentAutoSubsequentResolved(context, index, sessionKey):
         # Set status of current incident and fire event
         setStatus(context.get('_key'), context.get('incident_id'), 'auto_subsequent_resolved', sessionKey)
         event = 'severity=INFO origin="alert_handler" user="splunk-system-user" action="auto_subsequent_resolve" previous_status="{}" status="auto_previous_resolved" incident_id="{}" job_id="{}"'.format(context.get('status'), context.get('incident_id'), context.get('job_id'))
-        createIncidentChangeEvent(event, context.get('job_id'), index)
+        createIncidentChangeEvent(event, context.get('job_id'), index, sessionKey)
 
         ic = IncidentContext(sessionKey, incident_id)
         eh.handleEvent(alert=context.get('name'), event="incident_auto_subsequent_resolved", incident={"owner": context.get("owner")}, context=ic.getContext())
 
         # Update history of pre-existing incident and fire event
         event = 'severity=INFO origin="alert_handler" user="splunk-system-user" action="new_subsequent_incident" incident_id="{}" new_incident_id="{}"'.format(prev_incident['incident_id'], context.get('incident_id'))
-        createIncidentChangeEvent(context.get('event'), context.get('job_id'), index)
+        createIncidentChangeEvent(context.get('event'), context.get('job_id'), index, sessionKey)
 
         ic = IncidentContext(sessionKey, prev_incident['incident_id'])
         eh.handleEvent(alert=context.get('name'), event="incident_new_subsequent_incident", incident=prev_incident, context=ic.getContext())
@@ -138,7 +138,7 @@ def setIncidentAutoInfoResolved(context, index, sessionKey, statusval):
 
     # create and index a change event
     event = 'severity=INFO origin="alert_handler" user="splunk-system-user" action="auto_informational_resolve" previous_status="{}" status="{}" incident_id="{}" job_id="{}"'.format(context.get('status'), statusval, context.get('incident_id'), context.get('job_id'))
-    createIncidentChangeEvent(event, context.get('job_id'), index)
+    createIncidentChangeEvent(event, context.get('job_id'), index, sessionKey)
 
     # create a context run the event handler
     ic = IncidentContext(sessionKey, incident_id)
@@ -249,16 +249,25 @@ def updateIncident(incident_id, metadata, sessionKey):
     uri = '/servicesNS/nobody/alert_manager/storage/collections/data/incidents/{}'.format(incidents[0]['_key'])
     getRestData(uri, sessionKey, entry)
 
+def _submit_event(event_data, sourcetype, source, index, sessionKey):
+    uri = '/services/receivers/simple?sourcetype={}&source={}&index={}&host={}'.format(
+        urllib.parse.quote(sourcetype),
+        urllib.parse.quote(source),
+        urllib.parse.quote(index),
+        urllib.parse.quote(socket.gethostname())
+    )
+    rest.simpleRequest(uri, sessionKey=sessionKey, jsonargs=event_data if isinstance(event_data, str) else json.dumps(event_data), method='POST')
+
 def createMetadataEvent(metadata, index, sessionKey):
-    input.submit(json.dumps(metadata, sort_keys=True), hostname = socket.gethostname(), sourcetype = 'alert_metadata', source = 'alert_handler.py', index = index)
+    _submit_event(json.dumps(metadata, sort_keys=True), 'alert_metadata', 'alert_handler.py', index, sessionKey)
     log.info("Alert metadata written to index={}".format(index))
 
-def createIncidentChangeEvent(event, job_id, index):
+def createIncidentChangeEvent(event, job_id, index, sessionKey):
     now = time.strftime("%Y-%m-%dT%H:%M:%S+0000", time.gmtime())
     event_id = hashlib.md5(job_id.encode('utf-8') + now.encode('utf-8')).hexdigest()
     event_prefix = 'time={} event_id="{}" '.format(now, event_id)
     event = event_prefix + event
-    input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'alert_handler.py', index=index)
+    _submit_event(event, 'incident_change', 'alert_handler.py', index, sessionKey)
 
 '''
 Method added to allow for indexing of the results in addition to or in place of relying
@@ -267,13 +276,10 @@ on the KV store only.
 def createIncidentEvent(results, index, sessionKey, incident_id, alerttime, alert_title):
     alert_results = {}
     alert_results['incident_id'] = incident_id
-    # Switching back to iso formatted timestamp to avoid misinterpreation
-    # alert_results['alert_time'] = int(float(sutil.dt2epoch(sutil.parseISO(alerttime, True))))
-    # alert_results['timestamp'] = str(time.strftime('%Y-%m-%d %T %Z', time.gmtime(alert_results['alert_time'])))
     alert_results['alert_time'] = alerttime
     alert_results['title'] = alert_title
     alert_results.update(results)
-    input.submit(json.dumps(alert_results, sort_keys=True), hostname = socket.gethostname(), sourcetype = 'alert_data_results', source = 'alert_manager.py', index = index)
+    _submit_event(json.dumps(alert_results, sort_keys=True), 'alert_data_results', 'alert_manager.py', index, sessionKey)
 
 def getServerInfo(sessionKey):
     server_info = getRestData('/services/server/info', sessionKey)
@@ -397,7 +403,7 @@ def getLookupFile(lookup_name, sessionKey):
     lookup = getRestData(uri, sessionKey)
     #log.debug("getLookupFile(): lookup: {}".format(json.dumps(lookup)))
     log.debug("Got lookup content for lookup={}. filename={} app={}".format(lookup_name, lookup["entry"][0]["content"]["filename"], lookup["entry"][0]["acl"]["app"]))
-    return os.path.join(util.get_apps_dir(), lookup["entry"][0]["acl"]["app"], 'lookups', lookup["entry"][0]["content"]["filename"])
+    return os.path.join(_APPS_DIR, lookup["entry"][0]["acl"]["app"], 'lookups', lookup["entry"][0]["content"]["filename"])
 
 def getPriority(impact, urgency, default_priority, sessionKey):
     log.debug("getPriority(): Try to calculate priority for impact={} urgency={}".format(impact, urgency))
@@ -563,7 +569,6 @@ if __name__ == "__main__":
         if search_name == '':
             search_name = 'adhoc'
 
-        # Need to set the sessionKey (input.submit() doesn't allow passing the sessionKey)
         splunk.setDefault('sessionKey', sessionKey)
 
         # Get app settings
@@ -687,7 +692,7 @@ if __name__ == "__main__":
         if config['append_incident'] and incident_key is not None:
             append_incident = True
             event = 'severity=INFO origin="alert_handler" user="{}" action="comment" incident_id="{}" job_id="{}" alert_time="{}" comment="{}"'.format('splunk-system-user', incident_id, job_id, metadata['alert_time'], "Appending duplicate alert")
-            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'))
+            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'), sessionKey)
             # Update the duplicate_count
             updateDuplicateCount(incident_key, sessionKey)
             # Update incident
@@ -699,7 +704,7 @@ if __name__ == "__main__":
             append_incident = False
             incident_key = createIncident(metadata, config, incident_status, sessionKey)
             event = 'severity=INFO origin="alert_handler" user="{}" action="create" alert="{}" incident_id="{}" job_id="{}" result_id="{}" owner="{}" status="new" urgency="{}" ttl="{}" alert_time="{}"'.format('splunk-system-user', search_name, incident_id, job_id, result_id, metadata['owner'], metadata['urgency'], metadata['ttl'], metadata['alert_time'])
-            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'))
+            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'), sessionKey)
             log.info("Incident initial state added to collection for job_id={} with incident_id={} key={}".format(job_id, incident_id, incident_key))
 
         # Log suppress event if necessary
@@ -707,7 +712,7 @@ if __name__ == "__main__":
             user = 'splunk-system-user'
             rules = ' '.join(['suppression_rule="'+ rule_name +'"' for  rule_name in rule_names])
             event = 'severity=INFO origin="alert_handler" user="{}" action="suppress" alert="{}" incident_id="{}" job_id="{}" result_id="{}" {}'.format('splunk-system-user', search_name, incident_id, job_id, result_id, rules)
-            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'))
+            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'), sessionKey)
 
         # Write results to collection
         try:
@@ -789,10 +794,10 @@ if __name__ == "__main__":
             ic.update("owner", config['auto_assign_owner'])
 
             event = 'severity=INFO origin="alert_handler" user="splunk-system-user" action="change" incident_id="{}" job_id="{}" result_id="{}" owner="{}" previous_owner="unassigned"'.format(incident_id, job_id, result_id, config['auto_assign_owner'])
-            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'))
+            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'), sessionKey)
 
             event = 'severity=INFO origin="alert_handler" user="splunk-system-user" action="change" incident_id="{}" job_id="{}" result_id="{}" status="auto_assigned" previous_status="new"'.format(incident_id, job_id, result_id)
-            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'))
+            createIncidentChangeEvent(event, metadata['job_id'], settings.get('index'), sessionKey)
 
             if config['auto_subsequent_resolve'] == False:
                 eh.handleEvent(alert=search_name, event="incident_auto_assigned", incident={"owner": config["auto_assign_owner"]}, context=ic.getContext())
@@ -809,5 +814,5 @@ if __name__ == "__main__":
         log.info("Alert handler finished. duration={}s".format(duration))
 
     else:
-        print >> sys.stderr, "FATAL Unsupported execution mode (expected --execute flag)"
+        sys.stderr.write("FATAL Unsupported execution mode (expected --execute flag)\n")
         sys.exit(1)

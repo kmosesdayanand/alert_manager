@@ -5,10 +5,12 @@ import sys
 
 import splunk.rest as rest
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_BIN_DIR = os.path.dirname(_LIB_DIR)
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from AlertManagerLogger import setupLogger
 log = setupLogger('csvlookup')
@@ -35,7 +37,7 @@ class CsvLookup(object):
                     serverResponse, serverContent = rest.simpleRequest(uri, sessionKey=sessionKey, method='GET', getargs={'output_mode': 'json'})
                     try:
                         lookup = json.loads(serverContent.decode('utf-8'))
-                        file_path = os.path.join(util.get_apps_dir(), lookup["entry"][0]["acl"]["app"], 'lookups', lookup["entry"][0]["content"]["filename"])
+                        file_path = os.path.join(_APPS_DIR, lookup["entry"][0]["acl"]["app"], 'lookups', lookup["entry"][0]["content"]["filename"])
                         log.debug("Got file_path={} from REST API for lookup_name={}".format(file_path, lookup_name))
                     except:
                         log.error("Unable to retrieve lookup.")

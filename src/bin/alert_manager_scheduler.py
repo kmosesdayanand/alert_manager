@@ -4,7 +4,6 @@ import urllib.parse
 import json
 import splunk
 import splunk.rest as rest
-import splunk.input as input
 import splunk.entity as entity
 import time
 import hashlib
@@ -12,10 +11,12 @@ import datetime
 import socket
 from operator import itemgetter
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from EventHandler import EventHandler
 from IncidentContext import IncidentContext
@@ -23,6 +24,15 @@ from SuppressionHelper import SuppressionHelper
 from ApiManager import ApiManager
 
 from AlertManagerLogger import setupLogger
+
+def _submit_event(event_data, sourcetype, source, index, sessionKey):
+    uri = '/services/receivers/simple?sourcetype={}&source={}&index={}&host={}'.format(
+        urllib.parse.quote(sourcetype),
+        urllib.parse.quote(source),
+        urllib.parse.quote(index),
+        urllib.parse.quote(socket.gethostname())
+    )
+    rest.simpleRequest(uri, sessionKey=sessionKey, jsonargs=event_data if isinstance(event_data, str) else json.dumps(event_data), method='POST')
 
 def resolve_roles(role, roles):
     if role in roles:
@@ -117,7 +127,7 @@ if __name__ == "__main__":
 
                             event = 'time={} severity=INFO origin="alert_manager_scheduler" event_id="{}" user="splunk-system-user" action="auto_ttl_resolve" previous_status="{}" status="auto_ttl_resolved" incident_id="{}"'.format(now, event_id, old_status, incident['incident_id'])
                             log.debug("Event will be: {}".format(event))
-                            input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'alert_manager_scheduler.py', index = config['index'])
+                            _submit_event(event, 'incident_change', 'alert_manager_scheduler.py', config['index'], sessionKey)
                             ic = IncidentContext(sessionKey, incident["incident_id"])
                             eh.handleEvent(alert=alert["name"], event="incident_auto_ttl_resolved", incident={"owner": incident["owner"]}, context=ic.getContext())
                         else:
@@ -173,7 +183,7 @@ if __name__ == "__main__":
 
                         rules = ' '.join(['suppression_rule="'+ rule_name +'"' for  rule_name in rule_names])
                         event = 'time={} severity=INFO origin="alert_manager_scheduler" event_id="{}" user="splunk-system-user" action="auto_suppress_resolve" previous_status="{}" status="auto_suppress_resolved" incident_id="{}" {}'.format(now, event_id, old_status, incident['incident_id'], rules)
-                        input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'alert_manager_scheduler.py', index = config['index'])
+                        _submit_event(event, 'incident_change', 'alert_manager_scheduler.py', config['index'], sessionKey)
 
                         eh.handleEvent(alert=alert['alert'], event="incident_auto_suppress_resolved", incident={"owner": incident['owner']}, context=context)
 

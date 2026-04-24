@@ -4,10 +4,12 @@ import os
 import sys
 import splunk.rest as rest
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_BIN_DIR = os.path.dirname(_LIB_DIR)
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from AlertManagerLogger import setupLogger
 

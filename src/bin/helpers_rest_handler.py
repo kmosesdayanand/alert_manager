@@ -12,14 +12,15 @@ import uuid
 from string import Template as StringTemplate
 
 import splunk
-import splunk.appserver.mrsparkle.lib.util as util
 import splunk.rest as rest
 import splunk.entity as entity
-import splunk.input as input
 
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from AlertManagerUsers import AlertManagerUsers
 from CsvLookup import CsvLookup
@@ -29,6 +30,17 @@ from IncidentContext import IncidentContext
 from AlertManagerLogger import setupLogger
 
 logger = setupLogger('rest_handler')
+
+def _submit_event(event_data, sourcetype, source, index, sessionKey):
+    uri = '/services/receivers/simple?sourcetype={}&source={}&index={}&host={}'.format(
+        urllib.parse.quote(sourcetype),
+        urllib.parse.quote(source),
+        urllib.parse.quote(index),
+        urllib.parse.quote(socket.gethostname())
+    )
+    if isinstance(event_data, bytes):
+        event_data = event_data.decode('utf-8')
+    rest.simpleRequest(uri, sessionKey=sessionKey, jsonargs=event_data, method='POST')
 
 if sys.platform == "win32":
     import msvcrt # pylint: disable=import-error
@@ -296,11 +308,9 @@ class HelpersHandler(PersistentServerConnectionApplication):
             event = 'time={} severity="{}" origin="{}" event_id="{}" user="{}" action="change" incident_id="{}" job_id="{}" result_id="{}" status="{}" previous_status="{}"'.format(now, severity, origin, event_id, user, incident_id, job_id, result_id, status, previous_status)
 
         logger.debug("Event will be: {}".format(event))
-        event = event.encode('utf8')
 
         try:
-            splunk.setDefault('sessionKey', sessionKey)
-            input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'helper.py', index = config['index'])
+            _submit_event(event, 'incident_change', 'helper.py', config['index'], sessionKey)
             return self.response('Action logged', http.client.OK)
 
         except Exception as e:
@@ -378,7 +388,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
                 event_id = hashlib.md5(incident[0]['incident_id'].encode('utf-8') + now.encode('utf-8')).hexdigest()
                 event = 'time={} severity=INFO origin="incident_posture" event_id="{}" user="{}" action="change" incident_id="{}" {}="{}" previous_{}="{}"'.format(now, event_id, user, incident[0]['incident_id'], key, incident_data[key], key, incident[0][key])
                 logger.debug("Change event will be: {}".format(event))
-                input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'incident_settings.py', index = config['index'])
+                _submit_event(event, 'incident_change', 'incident_settings.py', config['index'], sessionKey)
                 incident[0][key] = incident_data[key]
 
                 # Set flag to prevent manual owner/urgency override to be overwritten by subsequent alerts
@@ -413,8 +423,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
             event_id = hashlib.md5(incident[0]['incident_id'].encode('utf-8') + now.encode('utf-8')).hexdigest()
             event = 'time={} severity=INFO origin="incident_posture" event_id="{}" user="{}" action="comment" incident_id="{}" comment="{}"'.format(now, event_id, user, incident[0]['incident_id'], incident_data['comment'])
             logger.debug("Comment event will be: {}".format(event))
-            event = event.encode('utf8')
-            input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'incident_settings.py', index = config['index'])
+            _submit_event(event, 'incident_change', 'incident_settings.py', config['index'], sessionKey)
             ic = IncidentContext(sessionKey, incident_id)
             eh.handleEvent(alert=incident[0]["alert"], event="incident_commented", incident=incident[0], context=ic.getContext())
 
@@ -537,8 +546,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
         logger.debug("Events: {}".format(events))
         
         if events!='':
-            events = events.encode('utf-8')
-            input.submit(events, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'incident_settings.py', index = config['index'])
+            _submit_event(events, 'incident_change', 'incident_settings.py', config['index'], sessionKey)
 
         logger.debug("Notifications: {}".format(notifications))
 
@@ -740,9 +748,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
         logger.debug("Metadata {}".format(metadata))
 
         try:
-            splunk.setDefault('sessionKey', sessionKey)
-            metadata = metadata.encode('utf-8')
-            input.submit(metadata, hostname = socket.gethostname(), sourcetype = 'alert_metadata', source = 'helper.py', index = config['index'])
+            _submit_event(metadata, 'alert_metadata', 'helper.py', config['index'], sessionKey)
 
         except Exception as e:
             msg = 'Unhandled Exception: {}'.format(str(e))
@@ -820,7 +826,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
                 try:
                     results = json.dumps(results, sort_keys=True)
 
-                    input.submit(results, hostname = socket.gethostname(), sourcetype = 'alert_data_results', source = 'helper.py', index = config['index'])
+                    _submit_event(results, 'alert_data_results', 'helper.py', config['index'], sessionKey)
                     logger.info("Results for incident_id={} written to index.".format(incident_id))
 
                 except:
@@ -832,11 +838,9 @@ class HelpersHandler(PersistentServerConnectionApplication):
         event = 'time={} event_id={} severity=INFO origin="alert_handler" user="{}" action="create" alert="{}" incident_id="{}" job_id="{}" result_id="{}" owner="{}" status="new" urgency="{}" ttl="{}" alert_time="{}"'.format(now, event_id, user, search_name, incident_id, job_id, result_id, owner, urgency, ttl, alert_time)
 
         logger.debug("Event will be: {}".format(event))
-        event = event.encode('utf8')
 
         try:
-            splunk.setDefault('sessionKey', sessionKey)
-            input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'helper.py', index = config['index'])
+            _submit_event(event, 'incident_change', 'helper.py', config['index'], sessionKey)
             return self.response('Action logged', http.client.OK)
 
         except Exception as e:

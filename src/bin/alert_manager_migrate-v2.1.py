@@ -5,7 +5,6 @@ import urllib.parse
 import json
 import splunk
 import splunk.rest as rest
-import splunk.input as input
 import splunk.entity as entity
 import splunk
 import time
@@ -16,10 +15,12 @@ import socket
 import re
 import os.path
 
-import splunk.appserver.mrsparkle.lib.util as util
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from CsvLookup import CsvLookup
 from ApiManager import ApiManager

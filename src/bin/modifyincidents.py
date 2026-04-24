@@ -6,9 +6,9 @@ import urllib
 import urllib.parse
 import time
 import splunk.rest as rest
-import splunk.input as input    
 import hashlib
 import socket
+import urllib.parse as _urlparse
 import splunk
 import splunk.entity as entity
 
@@ -81,7 +81,8 @@ class ModifyIncidentsCommand(StreamingCommand):
                             event_id = hashlib.md5(incident[0]['incident_id'].encode('utf-8') + now.encode('utf-8')).hexdigest()
                             event = 'time="{}" severity=INFO origin="ModifyIncidentsCommand" event_id="{}" user="{}" action="change" incident_id="{}" {}="{}" previous_{}="{}"'.format(now, event_id, user, incident[0]['incident_id'], key, attrs[key], key, incident[0][key])
                             
-                            input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'modifyincidents.py', index = self.config['index'])
+                            _uri = '/services/receivers/simple?sourcetype={}&source={}&index={}&host={}'.format(_urlparse.quote('incident_change'), _urlparse.quote('modifyincidents.py'), _urlparse.quote(self.config['index']), _urlparse.quote(socket.gethostname()))
+                            rest.simpleRequest(_uri, sessionKey=sessionKey, jsonargs=event if isinstance(event, str) else event.decode('utf-8'), method='POST')
 
                             incident[0][key] = attrs[key]
 
@@ -96,7 +97,8 @@ class ModifyIncidentsCommand(StreamingCommand):
                         event_id = hashlib.md5(incident[0]['incident_id'].encode('utf-8') + now.encode('utf-8')).hexdigest()
                         event = 'time="{}" severity=INFO origin="ModifyIncidentsCommand" event_id="{}" user="{}" action="comment" incident_id="{}" comment="{}"'.format(now, event_id, user, incident[0]['incident_id'], self.comment)
                         event = event.encode('utf8')
-                        input.submit(event, hostname = socket.gethostname(), sourcetype = 'incident_change', source = 'modifyincidents.py', index = self.config['index'])
+                        _uri = '/services/receivers/simple?sourcetype={}&source={}&index={}&host={}'.format(_urlparse.quote('incident_change'), _urlparse.quote('modifyincidents.py'), _urlparse.quote(self.config['index']), _urlparse.quote(socket.gethostname()))
+                        rest.simpleRequest(_uri, sessionKey=sessionKey, jsonargs=event if isinstance(event, str) else event.decode('utf-8'), method='POST')
 
                 else:                        
                     self.logger.warn("No attributes to modify found, aborting.")

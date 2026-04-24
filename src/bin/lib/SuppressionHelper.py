@@ -5,8 +5,6 @@ import splunk.auth as auth
 import splunk.entity as entity
 import splunk.Intersplunk as intersplunk
 import splunk.rest as rest
-import splunk.search as search
-import splunk.input as input
 import splunk.util as util
 import urllib
 import urllib.parse

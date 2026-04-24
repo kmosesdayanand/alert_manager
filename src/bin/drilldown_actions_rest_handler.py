@@ -12,14 +12,15 @@ import traceback
 from string import Template as StringTemplate
 
 import splunk
-import splunk.appserver.mrsparkle.lib.util as util
 import splunk.rest as rest
 import splunk.entity as entity
-import splunk.input as input
 
-dir = os.path.join(util.get_apps_dir(), 'alert_manager', 'bin', 'lib')
-if not dir in sys.path:
-    sys.path.append(dir)
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_DIR = os.path.dirname(_BIN_DIR)
+_APPS_DIR = os.path.dirname(_APP_DIR)
+_LIB_DIR = os.path.join(_BIN_DIR, 'lib')
+if _LIB_DIR not in sys.path:
+    sys.path.append(_LIB_DIR)
 
 from AlertManagerUsers import AlertManagerUsers
 from CsvLookup import CsvLookup
