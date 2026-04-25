@@ -31,6 +31,17 @@ If you'd like to support further development of the Alert Manager, please use th
 [![Donate](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=NTQJBX5VJZYHG)
 
 ## Release Notes
+- **v3.1.0**/   2026-04-25
+	- Splunk 10.x compatibility: fixed JS errors caused by quarantined select2, helpers/user_agent and select2.pcss modules
+	- Bundled select2 3.4.6 and stub modules into app static directory to avoid Splunk 10 quarantine issues
+	- Fixed `urllib.parse.splitquery()` deprecation warning (Python 3.8+) in alert_manager.py
+	- Fixed `loadincidentresults` and `loaddrilldowns` commands exiting with error code 1 due to missing `deprecation` package and incorrect sys.path setup
+	- Added `deprecation` import shim to splunklib/results.py so it works without the external package
+	- Fixed "Please check your inputs!" error when creating new incidents: replaced Linux-only `time.strftime("%s")` with cross-platform `int(time.time())`
+	- Fixed malformed JSON in incident metadata event construction
+	- Fixed bare `except` blocks referencing undefined `e` in helpers_rest_handler.py
+	- Fixed double `json.dumps()` call on already-serialized results string
+
 - **v3.0.11**/   2022-04-26
 	- Minor Issue fixed with alert processing
 
@@ -174,6 +185,13 @@ If you'd like to support further development of the Alert Manager, please use th
 	- Final release for Splunk Apptitude submission
 
 ## Changelog
+- **2026-04-25** kmosesdayanand
+	- Splunk 10.x JS compatibility: bundled select2 3.4.6, user_agent stub, and select2.pcss stub into appserver/static; mapped quarantined module IDs via require.config in autodiscover.js and all settings dashboard JS files
+	- Fixed urllib.parse.splitquery() deprecation in alert_manager.py (replaced with urlsplit().path)
+	- Fixed loadincidentresults and loaddrilldowns sys.path ordering and added missing deprecation import shim in splunklib/results.py
+	- Fixed _create_new_incident in helpers_rest_handler.py: Windows-compatible epoch time, valid JSON metadata, proper exception binding, removed double json.dumps
+	- Bumped version to 3.1.0 / build 3100
+
 - **2022-04-26** my2ndhead	
 	- Minor Issue fixed with alert processing
 - **2022-04-25** my2ndhead
