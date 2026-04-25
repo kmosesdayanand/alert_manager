@@ -674,7 +674,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
         # Create timestamp for event
         gmtime = time.gmtime()
         now = time.strftime("%Y-%m-%dT%H:%M:%S.000+0000", gmtime)
-        now_epoch = time.strftime("%s", gmtime)
+        now_epoch = str(int(time.time()))
 
         required = ['title', 'urgency', 'impact', 'owner']
         missing = [r for r in required if r not in post_data]
@@ -744,7 +744,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
         logger.debug("title: {}".format(title))
 
         # Create metadata event
-        metadata = '{{"alert":"{}", "alert_time": "{}", "origin": "{}", "app": "{}", "category": "{}", "display_fields":  "{}", "entry":[{{"content": "earliestTime": "{}", "eventSearch": "{}","latestTime": "{}"}}], "external_reference_id": "{}", "impact": "{}", "incident_id": "{}", "job_id": "{}", "owner": "{}", "priority": "{}", "result_id": "{}", "subcategory": "{}", "tags": "{}", "title": "{}", "ttl": "{}", "urgency": "{}"}}'.format(alert, now, origin, app, category, display_fields, earliest_time, event_search, latest_time, external_reference_id, impact, incident_id, job_id, owner, priority, result_id, subcategory, tags, title, ttl, urgency)
+        metadata = json.dumps({"alert": alert, "alert_time": now, "origin": origin, "app": app, "category": category, "display_fields": display_fields, "entry": [{"content": {"earliestTime": str(earliest_time), "eventSearch": event_search, "latestTime": str(latest_time)}}], "external_reference_id": external_reference_id, "impact": impact, "incident_id": incident_id, "job_id": job_id, "owner": owner, "priority": priority, "result_id": result_id, "subcategory": subcategory, "tags": tags, "title": title, "ttl": ttl, "urgency": urgency})
         logger.debug("Metadata {}".format(metadata))
 
         try:
@@ -816,7 +816,7 @@ class HelpersHandler(PersistentServerConnectionApplication):
                     rest.simpleRequest(uri, sessionKey=sessionKey, jsonargs=results)
                     logger.info("Results for incident_id={} written to collection.".format(incident_id))
 
-                except:
+                except Exception as e:
                     msg = 'Unhandled Exception: {}'.format(str(e))
                     logger.exception(msg)
                     return self.response(msg, http.client.INTERNAL_SERVER_ERROR)
@@ -824,12 +824,12 @@ class HelpersHandler(PersistentServerConnectionApplication):
             # Write results to index
             if config['index_data_results'] == True:
                 try:
-                    results = json.dumps(results, sort_keys=True)
+                    results_json = json.dumps({"incident_id": incident_id, "fields": field_array, "field_list": field_list, "job_id": job_id, "result_id": result_id}, sort_keys=True)
 
-                    _submit_event(results, 'alert_data_results', 'helper.py', config['index'], sessionKey)
+                    _submit_event(results_json, 'alert_data_results', 'helper.py', config['index'], sessionKey)
                     logger.info("Results for incident_id={} written to index.".format(incident_id))
 
-                except:
+                except Exception as e:
                     msg = 'Unhandled Exception: {}'.format(str(e))
                     logger.exception(msg)
                     return self.response(msg, http.client.INTERNAL_SERVER_ERROR)
