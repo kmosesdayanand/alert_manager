@@ -42,7 +42,22 @@ from json import loads as json_loads
 
 __all__ = ["ResultsReader", "Message", "JSONResultsReader"]
 
-import deprecation
+try:
+    import deprecation
+except ImportError:
+    import warnings
+    class _DeprecationShim:
+        @staticmethod
+        def deprecated(**kwargs):
+            def decorator(func):
+                import functools
+                @functools.wraps(func)
+                def wrapper(*args, **kw):
+                    warnings.warn(kwargs.get('details', 'deprecated'), DeprecationWarning, stacklevel=2)
+                    return func(*args, **kw)
+                return wrapper
+            return decorator
+    deprecation = _DeprecationShim()
 
 
 class Message:
